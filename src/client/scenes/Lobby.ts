@@ -19,6 +19,9 @@ export class Lobby extends Scene {
   roleButtons: Phaser.GameObjects.Text[] = [];
   readyButton: Phaser.GameObjects.Text;
   pollTimer: Phaser.Time.TimerEvent;
+  backButton: Phaser.GameObjects.Text;
+  confirmingLeave: boolean = false;
+
 
   // Receives { bossId } from BossSelect
   init(data: { bossId?: string }) {
@@ -31,6 +34,11 @@ export class Lobby extends Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x16213e);
+    this.roleButtons = [];       // reset on scene restart
+    this.confirmingLeave = false;
+    this.joined = false;
+    this.roomId = '';
+    
 
     // ---- Create all UI at 0,0 — updateLayout() positions everything ----
 
@@ -46,6 +54,17 @@ export class Lobby extends Scene {
         fontFamily: 'Arial', color: '#dddddd', align: 'center',
       })
       .setOrigin(0.5);
+
+    // Back button (top-left) — leaves the room with a confirm step
+    this.backButton = this.add
+      .text(0, 0, '← Leave', {
+        fontFamily: 'Arial Black', color: '#ffffff',
+        backgroundColor: '#553333',
+      })
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => void this.onBackPressed());
+    this.confirmingLeave = false;
 
     // Role picker buttons
     const roles: { role: Role; label: string; color: string }[] = [
@@ -101,6 +120,12 @@ export class Lobby extends Scene {
     const bodySize = Math.round(Phaser.Math.Clamp(width * 0.03, 14, 24));
     const buttonSize = Math.round(Phaser.Math.Clamp(width * 0.032, 15, 26));
     const readySize = Math.round(Phaser.Math.Clamp(width * 0.042, 20, 36));
+    const backSize = Math.round(Phaser.Math.Clamp(width * 0.026, 14, 20));
+
+    this.backButton
+      .setFontSize(backSize)
+      .setPadding({ x: 14, y: 8 } as Phaser.Types.GameObjects.Text.TextPadding)
+      .setPosition(width * 0.03, height * 0.07);
 
     this.titleText.setFontSize(titleSize).setPosition(cx, height * 0.1);
     this.playersText.setFontSize(bodySize).setPosition(cx, height * 0.28);
@@ -137,7 +162,7 @@ export class Lobby extends Scene {
   // Pull latest lobby state; if the fight started, switch scenes
   async refreshLobby() {
     try {
-      const res = await fetch('/api/lobby?bossId=raptor'); //change later
+      const res = await fetch(`/api/lobby?bossId=${this.bossId}`); //change later
       const data = (await res.json()) as LobbyStateResponse;
 
       if (data.status === 'started' && data.joined) {
@@ -166,7 +191,7 @@ export class Lobby extends Scene {
       const res = await fetch('/api/lobby/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, bossId: 'raptor' }), //change later
+        body: JSON.stringify({ role, bossId: this.bossId }), //change later
 
       });
       const data = (await res.json()) as LobbyStateResponse;
@@ -192,5 +217,34 @@ export class Lobby extends Scene {
     } catch (e) {
       console.error('Ready failed:', e);
     }
+  }
+
+  // First press asks for confirmation, second press actually leaves.
+  // (Simple two-tap confirm — no modal needed, resets after 3s)
+  async onBackPressed() {
+    if (!this.confirmingLeave) {
+      this.confirmingLeave = true;
+      this.backButton.setText('⚠️ Sure? Tap again').setStyle({ backgroundColor: '#884444' });
+      this.time.delayedCall(3000, () => {
+        this.confirmingLeave = false;
+        this.backButton.setText('← Leave').setStyle({ backgroundColor: '#553333' });
+      });
+      return;
+    }
+
+    // Confirmed: tell server, then back to boss select
+    try {
+      if (this.joined && this.roomId) {
+        await fetch('/api/lobby/leave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId: this.roomId }),
+        });
+      }
+    } catch (e) {
+      console.error('Leave failed:', e);
+    }
+    this.pollTimer.remove();
+    this.scene.start('BossSelect');
   }
 }

@@ -143,7 +143,9 @@ export async function applyTap(roomId: string) {
   return getFightState(roomId);
 }
 
-// The room this player should see: their active room, else the open room for the chosen boss
+// The room this player should see:
+// - their active room if mid-fight (started), or if it's an open room for the SAME boss
+// - otherwise auto-leave the stale open room and resolve to the chosen boss's room
 export async function resolveRoomForPlayer(
   postId: string,
   username: string,
@@ -152,10 +154,33 @@ export async function resolveRoomForPlayer(
   const myRoomId = await redis.get(playerRoomKey(postId, username));
 
   if (myRoomId) {
-    const status = await redis.hGet(roomKey(myRoomId), 'status');
-    if (status === 'open' || status === 'started') return myRoomId;
-    await redis.del(playerRoomKey(postId, username));
+    const room = await redis.hGetAll(roomKey(myRoomId));
+    const status = room?.status;
+
+    // Mid-fight: locked in, boss choice doesn't matter
+    if (status === 'started') return myRoomId;
+
+    // Waiting in an open room for the SAME boss: stay
+    if (status === 'open' && room?.bossId === bossId) return myRoomId;
+
+    // Open room for a DIFFERENT boss: leave it, fall through
+    if (status === 'open') {
+      await leaveRoom(postId, myRoomId, username);
+    } else {
+      // Room ended/missing: just clear the stale pointer
+      await redis.del(playerRoomKey(postId, username));
+    }
   }
 
   return getOrCreateCurrentRoom(postId, bossId);
+}
+
+// Remove a player from a room: clears their slot, ready flag, and room pointer.
+// (We don't delete the room itself — an empty open room is just... an open room.)
+export async function leaveRoom(postId: string, roomId: string, username: string) {
+  await Promise.all([
+    redis.hDel(playersKey(roomId), [username]),
+    redis.hDel(readyKey(roomId), [username]),
+    redis.del(playerRoomKey(postId, username)),
+  ]);
 }

@@ -18,6 +18,8 @@ export class BossSelect extends Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x0f1626);
+    this.cards = [];
+    this.bosses = [];
 
     this.titleText = this.add
       .text(0, 0, '🦖 Choose Your Hunt', {
@@ -65,7 +67,7 @@ export class BossSelect extends Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerover', () => bg.setFillStyle(0x27365a))
         .on('pointerout', () => bg.setFillStyle(0x1e2a45))
-        .on('pointerdown', () => {
+        .on('pointerdown', () => { 
           this.pollTimer.remove();
           this.scene.start('Lobby', { bossId: boss.id });
         });

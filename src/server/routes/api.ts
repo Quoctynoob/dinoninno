@@ -15,7 +15,7 @@ import {
   applyTap,
 } from '../core/room';
 import type { LobbyStateResponse, FightStateResponse, Role } from '../../shared/api';
-import { BOSSES, getOrCreateCurrentRoom } from '../core/room';
+import { BOSSES, getOrCreateCurrentRoom, leaveRoom } from '../core/room';
 
 
 type ErrorResponse = {
@@ -146,6 +146,23 @@ api.post('/lobby/ready', async (c) => {
   await setReady(postId, roomId, username);
   const state = await getLobbyState(roomId, username);
   return c.json<LobbyStateResponse>({ type: 'lobby-state', roomId, ...state });
+});
+
+// POST /lobby/leave  body: { roomId } — leave a waiting room (not a started fight)
+api.post('/lobby/leave', async (c) => {
+  const { postId } = context;
+  if (!postId) return c.json<ErrorResponse>({ status: 'error', message: 'postId required' }, 400);
+
+  const { roomId } = await c.req.json<{ roomId: string }>();
+  const username = (await reddit.getCurrentUsername()) ?? 'anonymous';
+
+  // Only allow leaving rooms that haven't started (mid-fight leaving comes later w/ penalties)
+  const status = await redis.hGet(`room:${roomId}`, 'status');
+  if (status === 'open') {
+    await leaveRoom(postId, roomId, username);
+  }
+
+  return c.json({ type: 'left' });
 });
 
 // ---- Fight ----
