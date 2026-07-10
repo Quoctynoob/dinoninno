@@ -16,16 +16,22 @@ export type LobbyStateResponse = {
   status: RoomStatus;
   players: PlayerInRoom[];
   capacity: number;
-  // true when the current user has joined this room
   joined: boolean;
+  myRole: Role | null;
 };
 
 export type FightStateResponse = {
   type: 'fight-state';
   roomId: string;
   status: RoomStatus;
+  bossId: string;
+  bossName: string;
+  bossEmoji: string;
   bossHp: number;
   bossMaxHp: number;
+  partyHp: number;
+  partyMaxHp: number;
+  shield: number;
   result: 'win' | 'loss' | null;
 };
 

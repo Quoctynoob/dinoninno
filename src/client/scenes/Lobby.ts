@@ -64,7 +64,6 @@ export class Lobby extends Scene {
       .setOrigin(0, 0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => void this.onBackPressed());
-    this.confirmingLeave = false;
 
     // Role picker buttons
     const roles: { role: Role; label: string; color: string }[] = [
@@ -167,12 +166,13 @@ export class Lobby extends Scene {
 
       if (data.status === 'started' && data.joined) {
         this.pollTimer.remove();
-        this.scene.start('Game', { roomId: data.roomId });
+        this.scene.start('Game', { roomId: data.roomId, role: this.myRole ?? 'attacker' });
         return;
       }
 
       this.roomId = data.roomId;
       this.joined = data.joined;
+      if (data.myRole) this.myRole = data.myRole;
 
       const lines = data.players.map(
         (p) => `${p.ready ? '✅' : '⏳'} ${p.username} — ${p.role}`

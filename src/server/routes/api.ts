@@ -177,7 +177,8 @@ api.get('/fight/:roomId', async (c) => {
 // One attack tap
 api.post('/fight/:roomId/tap', async (c) => {
   const roomId = c.req.param('roomId');
-  const state = await applyTap(roomId);
+  const username = (await reddit.getCurrentUsername()) ?? 'anonymous';
+  const state = await applyTap(roomId, username);
   return c.json<FightStateResponse>({ type: 'fight-state', roomId, ...state });
 });
 
