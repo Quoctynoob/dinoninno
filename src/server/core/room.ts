@@ -1,5 +1,6 @@
 import { redis } from '@devvit/web/server';
 import type { Role, PlayerInRoom, RoomStatus } from '../../shared/api';
+import { postVictoryComment } from './chronicle';
 
 // ---- Config ----
 // ---- Boss definitions ----
@@ -41,12 +42,42 @@ const readyKey = (roomId: string) => `room:${roomId}:ready`;     // hash: userna
 // Which room a given player is currently in (their active room)
 const playerRoomKey = (postId: string, username: string) =>
   `game:${postId}:playerRoom:${username}`;
+// Per-fight contribution stats — hash: username -> "damage|blocked|healed"
+const statsKey = (roomId: string) => `room:${roomId}:stats`;
 
-async function damageBoss(roomId: string, amount: number) {
+
+/* HELPER FUNCTIONS */
+// Deal damage to the boss; returns true if THIS hit was the killing blow
+async function damageBoss(roomId: string, amount: number): Promise<boolean> {
   const newHp = await redis.hIncrBy(roomKey(roomId), 'bossHp', -amount);
   if (newHp <= 0) {
-    await redis.hSet(roomKey(roomId), { bossHp: '0', status: 'ended', result: 'win' });
+    // Only the first hit to cross zero claims the kill (idempotency guard)
+    const status = await redis.hGet(roomKey(roomId), 'status');
+    if (status === 'started') {
+      await redis.hSet(roomKey(roomId), { bossHp: '0', status: 'ended', result: 'win' });
+      return true;
+    }
   }
+  return false;
+}
+
+// Read a player's stats triple from the stats hash
+async function getPlayerStats(roomId: string, username: string) {
+  const raw = await redis.hGet(statsKey(roomId), username);
+  const [damage, blocked, healed] = (raw ?? '0|0|0').split('|').map(Number);
+  return { damage: damage ?? 0, blocked: blocked ?? 0, healed: healed ?? 0 };
+}
+
+// Add to a player's contribution counters
+async function addStats(
+  roomId: string,
+  username: string,
+  add: { damage?: number; blocked?: number; healed?: number }
+) {
+  const s = await getPlayerStats(roomId, username);
+  await redis.hSet(statsKey(roomId), {
+    [username]: `${s.damage + (add.damage ?? 0)}|${s.blocked + (add.blocked ?? 0)}|${s.healed + (add.healed ?? 0)}`,
+  });
 }
 
 
@@ -146,6 +177,17 @@ export async function setReady(postId: string, roomId: string, username: string)
 export async function getFightState(roomId: string) {
   const room = await settleCounters(roomId);
   const boss = getBoss(room?.bossId ?? 'raptor');
+
+  // Per-player contributions (username -> stats), plus roles for display
+  const [statsHash, playersHash] = await Promise.all([
+    redis.hGetAll(statsKey(roomId)),
+    redis.hGetAll(playersKey(roomId)),
+  ]);
+  const contributions = Object.entries(playersHash ?? {}).map(([name, role]) => {
+    const [damage, blocked, healed] = (statsHash?.[name] ?? '0|0|0').split('|').map(Number);
+    return { username: name, role: role as Role, damage: damage ?? 0, blocked: blocked ?? 0, healed: healed ?? 0 };
+  });
+
   return {
     status: (room?.status ?? 'open') as RoomStatus,
     bossId: boss.id,
@@ -156,40 +198,59 @@ export async function getFightState(roomId: string) {
     partyHp: parseInt(room?.partyHp ?? '0'),
     partyMaxHp: parseInt(room?.partyMaxHp ?? '100'),
     shield: parseInt(room?.shield ?? '0'),
+    startedAt: parseInt(room?.startedAt || '0'),
+    contributions,
     result: (room?.result || null) as 'win' | 'loss' | null,
   };
 }
 
 // Apply one tap based on the player's role in this room.
-export async function applyTap(roomId: string, username: string) {
-  // Settle boss attacks first so we're acting on current state
+// Apply one tap based on the player's role in this room.
+// Records contribution stats and announces the victory on a killing blow.
+export async function applyTap(roomId: string, username: string, postId: string) {
+  // Settle boss counter-attacks first so we're acting on current state
   const room = await settleCounters(roomId);
   if (room?.status !== 'started') return getFightState(roomId);
 
   const role = (await redis.hGet(playersKey(roomId), username)) as Role | undefined;
   const boss = getBoss(room.bossId ?? 'raptor');
 
+  let killed = false;
+
   if (role === 'defender') {
-    // Shield up + a small hit (30% damage)
+    // Shield up (atomic, clamped) + a small hit (30% damage)
     const newShield = await redis.hIncrBy(roomKey(roomId), 'shield', SHIELD_PER_TAP);
     if (newShield > SHIELD_MAX) {
       await redis.hSet(roomKey(roomId), { shield: SHIELD_MAX.toString() });
     }
-    await damageBoss(roomId, Math.ceil(boss.attackDamage * 0.3));
+    const dmg = Math.ceil(boss.attackDamage * 0.3);
+    killed = await damageBoss(roomId, dmg);
+    await addStats(roomId, username, { blocked: SHIELD_PER_TAP, damage: dmg });
   } else if (role === 'supporter') {
-    // Heal + a small hit (30% damage)
+    // Heal party HP (atomic, clamped) + a small hit (30% damage)
     const newHp = await redis.hIncrBy(roomKey(roomId), 'partyHp', HEAL_PER_TAP);
     const maxHp = parseInt(room.partyMaxHp ?? '100');
     if (newHp > maxHp) {
       await redis.hSet(roomKey(roomId), { partyHp: maxHp.toString() });
     }
-    await damageBoss(roomId, Math.ceil(boss.attackDamage * 0.3));
+    const dmg = Math.ceil(boss.attackDamage * 0.3);
+    killed = await damageBoss(roomId, dmg);
+    await addStats(roomId, username, { healed: HEAL_PER_TAP, damage: dmg });
   } else {
-    // Attacker: full damage
-    await damageBoss(roomId, boss.attackDamage);
+    // Attacker (default): full damage
+    killed = await damageBoss(roomId, boss.attackDamage);
+    await addStats(roomId, username, { damage: boss.attackDamage });
   }
 
-  return getFightState(roomId);
+  const state = await getFightState(roomId);
+
+  // Killing blow -> announce the victory (once; fire-and-forget)
+  if (killed) {
+    const durationMs = Date.now() - state.startedAt;
+    void postVictoryComment(postId, state.bossName, state.bossEmoji, state.contributions, durationMs);
+  }
+
+  return state;
 }
 
 // The room this player should see:

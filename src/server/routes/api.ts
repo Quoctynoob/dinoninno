@@ -176,11 +176,13 @@ api.get('/fight/:roomId', async (c) => {
 
 // One attack tap
 api.post('/fight/:roomId/tap', async (c) => {
+  const { postId } = context;
   const roomId = c.req.param('roomId');
   const username = (await reddit.getCurrentUsername()) ?? 'anonymous';
-  const state = await applyTap(roomId, username);
+  const state = await applyTap(roomId, username, postId ?? '');
   return c.json<FightStateResponse>({ type: 'fight-state', roomId, ...state });
 });
+
 
 
 // List bosses with how many players are waiting in each one's open room

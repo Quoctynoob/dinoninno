@@ -20,6 +20,14 @@ export type LobbyStateResponse = {
   myRole: Role | null;
 };
 
+export type PlayerContribution = {
+  username: string;
+  role: Role;
+  damage: number;
+  blocked: number;
+  healed: number;
+};
+
 export type FightStateResponse = {
   type: 'fight-state';
   roomId: string;
@@ -32,6 +40,8 @@ export type FightStateResponse = {
   partyHp: number;
   partyMaxHp: number;
   shield: number;
+  startedAt: number;
+  contributions: PlayerContribution[];
   result: 'win' | 'loss' | null;
 };
 
@@ -68,3 +78,4 @@ export type BossListResponse = {
   type: 'boss-list';
   bosses: BossListItem[];
 };
+

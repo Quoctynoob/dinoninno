@@ -231,6 +231,22 @@ export class Game extends Scene {
         this.statusText.setText(`${s.bossName} was too strong... this time.`);
       }
     }
+
+    if (s.result === 'win') {
+      this.resultText.setText('🏆 VICTORY!').setColor('#ffd700');
+      this.camera.shake(300, 0.01);
+    } else {
+      this.resultText.setText('💀 DEFEAT').setColor('#ff6b6b');
+    }
+
+    // Per-player contribution recap replaces the status line
+    const lines = s.contributions.map((p) => {
+      const parts = [`⚔️ ${p.damage}`];
+      if (p.blocked > 0) parts.push(`🛡️ ${p.blocked}`);
+      if (p.healed > 0) parts.push(`💚 ${p.healed}`);
+      return `${p.username}: ${parts.join('  ')}`;
+    });
+    this.statusText.setText(lines.join('\n'));
   }
 
   updateLayout(width: number, height: number) {
