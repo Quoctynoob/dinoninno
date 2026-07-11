@@ -246,6 +246,8 @@ export class Game extends Scene {
       if (p.healed > 0) parts.push(`💚 ${p.healed}`);
       return `${p.username}: ${parts.join('  ')}`;
     });
+    lines.push('');
+    lines.push(s.result === 'win' ? '✨ XP earned! Check your profile at the hunt board.' : '✨ Some XP earned for the effort.');
     this.statusText.setText(lines.join('\n'));
   }
 

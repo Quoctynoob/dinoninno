@@ -79,3 +79,16 @@ export type BossListResponse = {
   bosses: BossListItem[];
 };
 
+export type MeResponse = {
+  type: 'me';
+  username: string;
+  level: number;
+  xp: number;
+  xpForNext: number;
+  energy: number;
+  energyMax: number;
+  nextEnergyInMs: number;
+  rewardsToday: number;
+  rewardCap: number;
+  coins: number;
+};

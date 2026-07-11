@@ -1,6 +1,6 @@
 import { Scene } from 'phaser';
 import * as Phaser from 'phaser';
-import { BossListResponse, BossListItem } from '../../shared/api';
+import { BossListResponse, BossListItem, MeResponse } from '../../shared/api';
 
 const POLL_MS = 2000; // refresh "hunters waiting" counts
 
@@ -11,12 +11,59 @@ export class BossSelect extends Scene {
   cards: Phaser.GameObjects.Container[] = [];
   bosses: BossListItem[] = [];
   pollTimer: Phaser.Time.TimerEvent;
+  statusBar: Phaser.GameObjects.Text;
+  meTimer: Phaser.Time.TimerEvent;
+  me: MeResponse | null = null;
+  meLoadedAt: number = 0;
+
+  async loadMe() {
+    try {
+      const res = await fetch('/api/me');
+      this.me = (await res.json()) as MeResponse;
+      this.meLoadedAt = Date.now();
+      this.renderStatusBar();
+    } catch (e) {
+      console.error('Failed to load player:', e);
+    }
+  }
+
+  // Render energy/level/reward line; countdown ticks locally between refreshes
+  renderStatusBar() {
+    if (!this.me) return;
+    const m = this.me;
+
+    let energyPart = `⚡ ${m.energy}/${m.energyMax}`;
+    if (m.energy < m.energyMax) {
+      const remaining = Math.max(m.nextEnergyInMs - (Date.now() - this.meLoadedAt), 0);
+      if (remaining === 0) { void this.loadMe(); return; } // point regenerated -> re-fetch
+
+      // h/m/s live countdown (ticks every second via meTimer)
+      const totalSecs = Math.ceil(remaining / 1000);
+      const h = Math.floor(totalSecs / 3600);
+      const mnt = Math.floor((totalSecs % 3600) / 60);
+      const s = totalSecs % 60;
+      const timeStr = h > 0 ? `${h}h ${mnt}m ${s}s` : mnt > 0 ? `${mnt}m ${s}s` : `${s}s`;
+      energyPart += ` · +1 in ${timeStr}`;
+    }
+
+  }
+
 
   constructor() {
     super('BossSelect');
   }
 
   create() {
+    // ---- Player status bar: energy + timer, level/xp, rewards, coins ----
+    this.statusBar = this.add
+      .text(0, 0, '', { fontFamily: 'Arial Black', color: '#ffd700', align: 'center' })
+      .setOrigin(0.5);
+
+    void this.loadMe();
+    this.meTimer = this.time.addEvent({
+      delay: 1000, loop: true,
+      callback: () => this.renderStatusBar(),   // re-render ticks the countdown locally
+    });
     this.cameras.main.setBackgroundColor(0x0f1626);
     this.cards = [];
     this.bosses = [];
@@ -68,7 +115,12 @@ export class BossSelect extends Scene {
         .on('pointerover', () => bg.setFillStyle(0x27365a))
         .on('pointerout', () => bg.setFillStyle(0x1e2a45))
         .on('pointerdown', () => { 
+          if (this.me && this.me.energy <= 0) {
+            this.statusBar.setText('⚡ Out of energy! Rest, hunter — your strength returns soon.');
+            return;
+          }
           this.pollTimer.remove();
+          this.meTimer.remove();
           this.scene.start('Lobby', { bossId: boss.id });
         });
 
@@ -109,6 +161,9 @@ export class BossSelect extends Scene {
     const nameSize = Math.round(Phaser.Math.Clamp(width * 0.028, 14, 22));
     const smallSize = Math.round(Phaser.Math.Clamp(width * 0.022, 12, 17));
     const emojiSize = Math.round(Phaser.Math.Clamp(width * 0.06, 32, 52));
+
+    const statusSize = Math.round(Phaser.Math.Clamp(width * 0.022, 12, 17));
+    this.statusBar.setFontSize(statusSize).setPosition(cx, height * 0.16);
 
     if (isNarrow) {
       // Phone: cards stacked vertically, wide and short

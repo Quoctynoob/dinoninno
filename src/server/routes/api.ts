@@ -16,6 +16,7 @@ import {
 } from '../core/room';
 import type { LobbyStateResponse, FightStateResponse, Role } from '../../shared/api';
 import { BOSSES, getOrCreateCurrentRoom, leaveRoom } from '../core/room';
+import { getPlayer } from '../core/player';
 
 
 type ErrorResponse = {
@@ -205,4 +206,11 @@ api.get('/bosses', async (c) => {
   );
 
   return c.json({ type: 'boss-list', bosses });
+});
+
+// Current player's profile (energy, level, xp, rewards, coins)
+api.get('/me', async (c) => {
+  const username = (await reddit.getCurrentUsername()) ?? 'anonymous';
+  const player = await getPlayer(username);
+  return c.json({ type: 'me', ...player });
 });
