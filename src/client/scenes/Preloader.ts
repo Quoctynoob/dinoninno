@@ -69,6 +69,6 @@ export class Preloader extends Scene {
     }
 
     //  All assets loaded + animations defined -> off to the main menu
-    this.scene.start('MainMenu');
+    this.scene.start('BossSelect');
   }
 }

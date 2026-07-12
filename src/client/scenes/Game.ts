@@ -5,13 +5,6 @@ import { FightStateResponse, Role, PlayerContribution } from '../../shared/api';
 const TAP_COOLDOWN_MS = 400;
 const POLL_INTERVAL_MS = 500;
 
-// Role -> button appearance
-const ROLE_BUTTON: Record<Role, { label: string; bg: string; hover: string }> = {
-  attacker:  { label: '⚔️ ATTACK', bg: '#7b2d26', hover: '#94382e' },
-  defender:  { label: '🛡️ SHIELD', bg: '#2d4a7b', hover: '#385b94' },
-  supporter: { label: '💚 HEAL',   bg: '#2d7b4a', hover: '#38945b' },
-};
-
 export class Game extends Scene {
   camera: Phaser.Cameras.Scene2D.Camera;
 
@@ -35,23 +28,18 @@ export class Game extends Scene {
   partySprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
   partyShadows: Map<string, Phaser.GameObjects.Image> = new Map();
   partyNames: Map<string, Phaser.GameObjects.Text> = new Map();
+  partyBars: Map<string, { bg: Phaser.GameObjects.Rectangle; fill: Phaser.GameObjects.Rectangle }> = new Map();
 
   // ---- UI ----
   bossNameText: Phaser.GameObjects.Text;
   bossHpBarBg: Phaser.GameObjects.Rectangle;
   bossHpBarFill: Phaser.GameObjects.Rectangle;
   bossHpText: Phaser.GameObjects.Text;
-  partyHpBarBg: Phaser.GameObjects.Rectangle;
-  partyHpBarFill: Phaser.GameObjects.Rectangle;
-  partyHpText: Phaser.GameObjects.Text;
   shieldText: Phaser.GameObjects.Text;
-  actionButton: Phaser.GameObjects.Text;
   statusText: Phaser.GameObjects.Text;
   resultText: Phaser.GameObjects.Text;
   backButton: Phaser.GameObjects.Text;
-
   bossBarWidth: number = 300;
-  partyBarWidth: number = 400;
   pollTimer: Phaser.Time.TimerEvent;
 
   constructor() {
@@ -68,6 +56,7 @@ export class Game extends Scene {
     this.partySprites = new Map();
     this.partyShadows = new Map();
     this.partyNames = new Map();
+    this.partyBars = new Map();
     this.bossIdleTween = null;
     this.background = null;
   }
@@ -81,12 +70,17 @@ export class Game extends Scene {
       this.background = this.add.image(0, 0, 'bg_arena').setOrigin(0.5);
     }
 
-    // ---- Boss: sprite if art exists, placeholder rectangle otherwise ----
+    // ---- Boss: sprite if art exists, placeholder otherwise — TAP THE BOSS TO ACT ----
     if (this.textures.exists('boss_volcano')) {
-      this.bossSprite = this.add.image(0, 0, 'boss_volcano').setOrigin(0.5, 1);
+      this.bossSprite = this.add.image(0, 0, 'boss_volcano')
+        .setOrigin(0.5, 1)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => void this.onActionTap());
     } else {
-      // Placeholder: brooding purple block (origin bottom-center like the sprite will be)
-      this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b).setOrigin(0.5, 1);
+      this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b)
+        .setOrigin(0.5, 1)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => void this.onActionTap());
     }
 
     // ---- Boss UI (floats above the boss) ----
@@ -106,14 +100,6 @@ export class Game extends Scene {
       .setOrigin(0.5);
 
     // ---- Party UI (bottom strip) ----
-    this.partyHpBarBg = this.add.rectangle(0, 0, 10, 10, 0x222222).setOrigin(0.5);
-    this.partyHpBarFill = this.add.rectangle(0, 0, 10, 10, 0x4caf50).setOrigin(0, 0.5);
-    this.partyHpText = this.add
-      .text(0, 0, '', {
-        fontFamily: 'Arial Black', color: '#ffffff',
-        stroke: '#000000', strokeThickness: 3,
-      })
-      .setOrigin(0.5);
     this.shieldText = this.add
       .text(0, 0, '', { fontFamily: 'Arial Black', color: '#7fb3ff', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(0.5);
@@ -133,17 +119,6 @@ export class Game extends Scene {
       .setOrigin(0.5)
       .setVisible(false);
 
-    // ---- Action button ----
-    const rb = ROLE_BUTTON[this.myRole];
-    this.actionButton = this.add
-      .text(0, 0, rb.label, {
-        fontFamily: 'Arial Black', color: '#ffd700', backgroundColor: rb.bg,
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => this.actionButton.setStyle({ backgroundColor: rb.hover }))
-      .on('pointerout', () => this.actionButton.setStyle({ backgroundColor: rb.bg }))
-      .on('pointerdown', () => void this.onActionTap());
 
     // ---- Back button (post-fight) ----
     this.backButton = this.add
@@ -208,11 +183,14 @@ export class Game extends Scene {
         sprite.once('animationcomplete', () => sprite.play(`dino_${this.myRole}_idle`));
       }
     });
+    // Boss squishes slightly under your tap (immediate local feedback)
     this.tweens.add({
-      targets: this.actionButton,
-      scale: { from: 1.08, to: 1 },
-      duration: 120,
+      targets: this.bossSprite,
+      scaleX: this.bossSprite.scaleX * 1.05,
+      scaleY: this.bossSprite.scaleY * 0.95,
+      duration: 70, yoyo: true,
     });
+    
 
     try {
       const response = await fetch(`/api/fight/${this.roomId}/tap`, { method: 'POST' });
@@ -242,12 +220,22 @@ export class Game extends Scene {
       const sprite = this.add.sprite(x, y, key)
         .setScale(dinoScale)
         .play(`${key}_idle`);
+      const barW = 20 * dinoScale;
+      const barH = Math.max(3 * Math.floor(dinoScale / 2), 4);
+      const barY = y - 12 * dinoScale;
+
       const nameTag = this.add
-        .text(x, y - 11 * dinoScale, p.username, {
+        .text(x, barY - barH - 6, p.username, {
           fontFamily: 'Arial', fontSize: 11, color: '#ffffff',
           stroke: '#000000', strokeThickness: 3,
         })
         .setOrigin(0.5);
+      const barBg = this.add.rectangle(x, barY, barW, barH, 0x222222).setOrigin(0.5);
+      const barFill = this.add
+        .rectangle(x - barW / 2, barY, barW, barH, 0x4caf50)
+        .setOrigin(0, 0.5);
+
+      this.partyBars.set(p.username, { bg: barBg, fill: barFill });
 
       this.partyShadows.set(p.username, shadow);
       this.partySprites.set(p.username, sprite);
@@ -326,7 +314,6 @@ export class Game extends Scene {
 
     this.bossNameText.setText(`${s.bossName}`);
     this.bossHpText.setText(`${s.bossHp} / ${s.bossMaxHp}`);
-    this.partyHpText.setText(`🏕️ ${s.partyHp} / ${s.partyMaxHp}`);
     this.shieldText.setText(s.shield > 0 ? `🛡️ ${s.shield}` : '');
 
     this.tweens.add({
@@ -334,19 +321,18 @@ export class Game extends Scene {
       width: Math.max((s.bossHp / s.bossMaxHp) * this.bossBarWidth, 0),
       duration: 200, ease: 'Cubic.easeOut',
     });
-    this.tweens.add({
-      targets: this.partyHpBarFill,
-      width: Math.max((s.partyHp / s.partyMaxHp) * this.partyBarWidth, 0),
-      duration: 200, ease: 'Cubic.easeOut',
-    });
     const ratio = s.partyHp / s.partyMaxHp;
-    this.partyHpBarFill.setFillStyle(ratio > 0.5 ? 0x4caf50 : ratio > 0.25 ? 0xff9800 : 0xf44336);
+    // Mini bars above each dino mirror the shared party HP (per-player HP: future)
+    this.partyBars.forEach(({ bg, fill }) => {
+      const w = bg.width * ratio;
+      this.tweens.add({ targets: fill, width: Math.max(w, 0), duration: 200, ease: 'Cubic.easeOut' });
+      fill.setFillStyle(ratio > 0.5 ? 0x4caf50 : ratio > 0.25 ? 0xff9800 : 0xf44336);
+    });
 
     // ---- End states (once) ----
     if (s.result && !this.fightOver) {
       this.fightOver = true;
       this.pollTimer.remove();
-      this.actionButton.setVisible(false);
       this.backButton.setVisible(true);
       this.resultText.setVisible(true);
 
@@ -426,18 +412,10 @@ export class Game extends Scene {
       .setSize(this.bossBarWidth * (this.bossHp / this.bossMaxHp || 0), bossBarH);
     this.bossHpText.setFontSize(barTextSize).setPosition(bossX, bossTopY - bossBarH);
 
-    // ---- Party bar: bottom strip above the button ----
-    this.partyBarWidth = Math.min(width * 0.6, 380);
-    const partyBarH = Math.round(Phaser.Math.Clamp(height * 0.028, 13, 20));
-    const partyBarY = height * 0.82;
-    this.partyHpBarBg.setPosition(cx, partyBarY).setSize(this.partyBarWidth, partyBarH);
-    this.partyHpBarFill
-      .setPosition(cx - this.partyBarWidth / 2, partyBarY)
-      .setSize(this.partyBarWidth * (this.partyHp / this.partyMaxHp || 0), partyBarH);
-    this.partyHpText.setFontSize(barTextSize).setPosition(cx, partyBarY);
+    // ---- Shield indicator: floats near the squad (bottom-left area) ----
     this.shieldText
-      .setFontSize(barTextSize)
-      .setPosition(cx + this.partyBarWidth / 2 + 34, partyBarY);
+      .setFontSize(barTextSize + 2)
+      .setPosition(width * 0.16, height * 0.86);
 
     // ---- Status / result / buttons ----
     const labelSize = Math.round(Phaser.Math.Clamp(width * 0.02, 11, 16));
@@ -446,11 +424,6 @@ export class Game extends Scene {
 
     this.statusText.setFontSize(labelSize).setPosition(cx, height * 0.3);
     this.resultText.setFontSize(resultSize).setPosition(cx, height * 0.42);
-
-    this.actionButton
-      .setFontSize(actionSize)
-      .setPadding({ x: Math.round(actionSize * 1.1), y: Math.round(actionSize * 0.55) } as Phaser.Types.GameObjects.Text.TextPadding)
-      .setPosition(cx, height * 0.91);
     this.backButton
       .setFontSize(Math.round(actionSize * 0.6))
       .setPadding({ x: 20, y: 12 } as Phaser.Types.GameObjects.Text.TextPadding)
