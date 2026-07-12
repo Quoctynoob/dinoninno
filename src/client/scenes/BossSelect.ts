@@ -28,6 +28,7 @@ export class BossSelect extends Scene {
   }
 
   // Render energy/level/reward line; countdown ticks locally between refreshes
+  // Render energy/level/reward line; countdown ticks locally between refreshes
   renderStatusBar() {
     if (!this.me) return;
     const m = this.me;
@@ -46,6 +47,11 @@ export class BossSelect extends Scene {
       energyPart += ` · +1 in ${timeStr}`;
     }
 
+    // The missing piece: actually write it to the status bar
+    const bonusLeft = m.rewardCap - m.rewardsToday;
+    this.statusBar.setText(
+      `${energyPart}\n🏅 Lv ${m.level} (${m.xp}/${m.xpForNext} XP) · 🎁 ${bonusLeft}/${m.rewardCap} bonus hunts · 🪙 ${m.coins}`
+    );
   }
 
 
@@ -163,14 +169,17 @@ export class BossSelect extends Scene {
     const emojiSize = Math.round(Phaser.Math.Clamp(width * 0.06, 32, 52));
 
     const statusSize = Math.round(Phaser.Math.Clamp(width * 0.022, 12, 17));
-    this.statusBar.setFontSize(statusSize).setPosition(cx, height * 0.16);
+    this.statusBar
+      .setFontSize(statusSize)
+      .setPosition(cx, isNarrow ? height * 0.17 : height * 0.16);
+
 
     if (isNarrow) {
       // Phone: cards stacked vertically, wide and short
       const cardW = width * 0.86;
       const cardH = height * 0.2;
       this.cards.forEach((card, i) => {
-        card.setPosition(cx, height * (0.24 + i * 0.25));
+        card.setPosition(cx, height * (0.3 + i * 0.23));
         this.sizeCard(card, cardW, cardH, emojiSize, nameSize, smallSize, true);
       });
     } else {
