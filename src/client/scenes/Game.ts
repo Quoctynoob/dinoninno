@@ -18,6 +18,7 @@ export class Game extends Scene {
   shield: number = 0;
   fightOver: boolean = false;
   lastTapAt: number = 0;
+  artApplied: boolean = false;
   lastSeenBossHp: number | null = null;
   lastSeenPartyHp: number | null = null;
 
@@ -59,25 +60,15 @@ export class Game extends Scene {
     this.partyBars = new Map();
     this.bossIdleTween = null;
     this.background = null;
+    this.artApplied = false;   // in init()
   }
 
   create() {
     this.camera = this.cameras.main;
     this.camera.setBackgroundColor(0x1a2f1a); // jungle-dark fallback behind bg image
 
-    // ---- Background (covers screen; placeholder = plain color if missing) ----
-    if (this.textures.exists('bg_arena')) {
-      this.background = this.add.image(0, 0, 'bg_arena').setOrigin(0.5);
-    }
-
-    // ---- Boss: sprite if art exists, placeholder otherwise — TAP THE BOSS TO ACT ----
-    if (this.textures.exists('boss_volcano')) {
-      this.bossSprite = this.add.image(0, 0, 'boss_volcano')
-        .setOrigin(0.5, 1)
-    } else {
-      this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b)
-        .setOrigin(0.5, 1)
-    }
+    // ---- Boss placeholder; real art swaps in via applyBossArt() once state arrives ----
+    this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b).setOrigin(0.5, 1);
 
     // ---- Tap anywhere on the battlefield to act ----
     this.input.on('pointerdown', () => void this.onActionTap());
@@ -291,6 +282,7 @@ export class Game extends Scene {
 
   applyState(s: FightStateResponse) {
     if (this.fightOver) return;
+    this.applyBossArt(s.bossId);
 
     this.syncPartySprites(s.contributions);
 
@@ -389,6 +381,33 @@ export class Game extends Scene {
     });
   }
 
+  // Swap in the real boss + arena art once we know which boss this room has
+  applyBossArt(bossId: string) {
+    if (this.artApplied) return;
+    this.artApplied = true;
+
+    const bossKey = `boss_${bossId}`;
+    if (this.textures.exists(bossKey)) {
+      const { x, y } = this.bossSprite;
+      this.bossIdleTween?.remove();
+      this.bossSprite.destroy();
+      this.bossSprite = this.add.image(x, y, bossKey).setOrigin(0.5, 1);
+      this.bossIdleTween = this.tweens.add({
+        targets: this.bossSprite,
+        scaleY: { from: 1, to: 1.04 },
+        scaleX: { from: 1, to: 0.98 },
+        duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    }
+
+    const bgKey = `bg_${bossId}`;
+    if (this.textures.exists(bgKey) && !this.background) {
+      this.background = this.add.image(0, 0, bgKey).setOrigin(0.5).setDepth(-10);
+    }
+
+    this.updateLayout(this.scale.width, this.scale.height);
+  }
+
   updateLayout(width: number, height: number) {
     this.cameras.resize(width, height);
     const cx = width / 2;
@@ -402,10 +421,11 @@ export class Game extends Scene {
     }
 
     // ---- Boss: right-of-center, standing on an implied ground line ----
+    // ---- Boss: right-of-center on the ground line, ~28% of screen height ----
     const groundY = height * 0.72;
     const bossX = isNarrow ? width * 0.68 : width * 0.66;
-    // Boss height ~28% of screen; source is 64px tall
-    const bossScale = Math.max((height * 0.28) / 64, 1.5);
+    const srcH = this.bossSprite.height || 64; // frame height (64 for placeholder)
+    const bossScale = (height * 0.28) / srcH;
     this.bossSprite.setPosition(bossX, groundY);
     this.bossSprite.setScale(bossScale);
 
@@ -414,7 +434,7 @@ export class Game extends Scene {
     const barTextSize = Math.round(Phaser.Math.Clamp(width * 0.02, 11, 16));
     this.bossBarWidth = Math.min(width * 0.34, 260);
     const bossBarH = Math.round(Phaser.Math.Clamp(height * 0.03, 14, 22));
-    const bossTopY = groundY - 64 * bossScale;
+    const bossTopY = groundY - srcH * bossScale;
 
     this.bossNameText.setFontSize(titleSize).setPosition(bossX, bossTopY - bossBarH * 2.4);
     this.bossHpBarBg.setPosition(bossX, bossTopY - bossBarH).setSize(this.bossBarWidth, bossBarH);

@@ -37,15 +37,20 @@ export class Preloader extends Scene {
       frameWidth: 24, frameHeight: 24,
     });
 
-    this.load.image('boss_volcano', 'assets/boss_volcano.png');
-    this.load.image('bg_arena', 'assets/bg_arena.png');
+    // key = boss_{id}; file = whatever you named the art
+    this.load.image('boss_raptor', 'boss_raptor.png');
+    this.load.image('bg_raptor', 'bg_raptor.png');
+    this.load.image('boss_rex', 'boss_rex.png');
+    this.load.image('bg_rex', 'bg_rex.png');
+    this.load.image('boss_titan', 'boss_titan.png');
+    this.load.image('bg_titan', 'bg_titan.png');
 
     // ---- Sound effects ----
-    this.load.audio('sfx_hit', 'assets/sfx_hit.wav');
-    this.load.audio('sfx_heal', 'assets/sfx_heal.wav');
-    this.load.audio('sfx_shield', 'assets/sfx_shield.wav');
-    this.load.audio('sfx_victory', 'assets/sfx_victory.wav');
-    this.load.audio('sfx_defeat', 'assets/sfx_defeat.wav');
+    this.load.audio('sfx_hit', 'sfx_hit.wav');
+    this.load.audio('sfx_heal', 'sfx_heal.wav');
+    this.load.audio('sfx_shield', 'sfx_shield.wav');
+    this.load.audio('sfx_victory', 'sfx_victory.wav');
+    this.load.audio('sfx_defeat', 'sfx_defeat.wav');
   }
 
   create() {

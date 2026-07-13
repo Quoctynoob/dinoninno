@@ -16,9 +16,9 @@ export type BossConfig = {
 };
 
 export const BOSSES: BossConfig[] = [
-  { id: 'raptor', name: 'Rogue Raptor', emoji: '🦖', maxHp: 400, attackDamage: 10, counterDamage: 8,  counterIntervalMs: 5000 },
-  { id: 'rex',    name: 'Tyrant Rex',   emoji: '🦴', maxHp: 800, attackDamage: 10, counterDamage: 14, counterIntervalMs: 5000 },
-  { id: 'titan',  name: 'Volcano Titan',emoji: '🌋', maxHp: 1500,attackDamage: 10, counterDamage: 22, counterIntervalMs: 6000 },
+  { id: 'raptor', name: 'Mastofang', emoji: '🦖', maxHp: 400, attackDamage: 10, counterDamage: 8,  counterIntervalMs: 5000 },
+  { id: 'rex',    name: 'Pyroclastyl',   emoji: '🦴', maxHp: 800, attackDamage: 10, counterDamage: 14, counterIntervalMs: 5000 },
+  { id: 'titan',  name: 'Fungisaurus',emoji: '🌋', maxHp: 1500,attackDamage: 10, counterDamage: 22, counterIntervalMs: 6000 },
 ];
 
 // Shared party stats (same for all bosses for now)

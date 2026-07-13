@@ -1,7 +1,7 @@
 import { redis } from '@devvit/web/server';
 
 // ---- Tuning knobs (all balance changes happen here) ----
-const DATA_VERSION = 'v1';        // bump to reset ALL player data
+const DATA_VERSION = 'v2';        // bump to reset ALL player data
 export const ENERGY_MAX = 5;
 export const ENERGY_REGEN_MS = 2 * 60 * 60 * 1000; // +1 energy per 2 hours
 export const DAILY_REWARD_CAP = 3;                  // rewarded wins per day

@@ -74,16 +74,16 @@ export class Lobby extends Scene {
       .on('pointerdown', () => void this.onBackPressed());
 
     // Boss chip: rectangle with boss icon on the left, name to its right
-    this.bossChipBg = this.add.rectangle(0, 0, 10, 10, 0x1e2a45).setStrokeStyle(2, 0x3a4a6b).setOrigin(0, 0.5);
-    if (this.textures.exists('boss_volcano')) {
-      this.bossChipIcon = this.add.image(0, 0, 'boss_volcano').setOrigin(0.5);
+    const chipKey = `boss_${this.bossId}`;
+    if (this.textures.exists(chipKey)) {
+      this.bossChipIcon = this.add.image(0, 0, chipKey).setOrigin(0.5);
     } else {
       this.bossChipIcon = this.add.rectangle(0, 0, 24, 24, 0x6a3d7b).setOrigin(0.5);
     }
+
+    this.bossChipBg = this.add.rectangle(0, 0, 10, 10, 0x1e2a45).setStrokeStyle(2, 0x3a4a6b).setOrigin(0, 0.5);
     this.bossChipName = this.add
-      .text(0, 0, '...', {
-        fontFamily: 'Arial Black', color: '#ffffff',
-      })
+      .text(0, 0, '...', { fontFamily: 'Arial Black', color: '#ffffff' })
       .setOrigin(0, 0.5);
 
     // Energy + rewards (right side of the bar)

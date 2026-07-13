@@ -160,7 +160,11 @@ export class BossSelect extends Scene {
           this.scene.start('Lobby', { bossId: boss.id });
         });
 
-      const emoji = this.add.text(0, 0, boss.emoji, { fontSize: 48 }).setOrigin(0.5);
+      const iconKey = `boss_${boss.id}`;
+      const emoji = this.textures.exists(iconKey)
+        ? (this.add.image(0, 0, iconKey) as Phaser.GameObjects.Image | Phaser.GameObjects.Text)
+        : this.add.text(0, 0, boss.emoji, { fontSize: 48 }).setOrigin(0.5);
+      if (emoji instanceof Phaser.GameObjects.Image) emoji.setOrigin(0.5);
       const name = this.add
         .text(0, 0, boss.name, { fontFamily: 'Arial Black', color: '#ffffff' })
         .setOrigin(0.5);
@@ -261,7 +265,13 @@ export class BossSelect extends Scene {
     const waiting = card.getData('waiting') as Phaser.GameObjects.Text;
 
     bg.setSize(w, h);
-    emoji.setFontSize(emojiSize);
+    if (emoji instanceof Phaser.GameObjects.Image) {
+      const target = emojiSize * 1.6;
+      const scale = target / Math.max(emoji.height, 1);
+      emoji.setScale(scale);
+    } else {
+      (emoji as Phaser.GameObjects.Text).setFontSize(emojiSize);
+    }
     name.setFontSize(nameSize);
     hp.setFontSize(smallSize);
     waiting.setFontSize(smallSize);
