@@ -39,6 +39,13 @@ export class Preloader extends Scene {
 
     this.load.image('boss_volcano', 'assets/boss_volcano.png');
     this.load.image('bg_arena', 'assets/bg_arena.png');
+
+    // ---- Sound effects ----
+    this.load.audio('sfx_hit', 'assets/sfx_hit.wav');
+    this.load.audio('sfx_heal', 'assets/sfx_heal.wav');
+    this.load.audio('sfx_shield', 'assets/sfx_shield.wav');
+    this.load.audio('sfx_victory', 'assets/sfx_victory.wav');
+    this.load.audio('sfx_defeat', 'assets/sfx_defeat.wav');
   }
 
   create() {

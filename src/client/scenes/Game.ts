@@ -74,14 +74,13 @@ export class Game extends Scene {
     if (this.textures.exists('boss_volcano')) {
       this.bossSprite = this.add.image(0, 0, 'boss_volcano')
         .setOrigin(0.5, 1)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => void this.onActionTap());
     } else {
       this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b)
         .setOrigin(0.5, 1)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => void this.onActionTap());
     }
+
+    // ---- Tap anywhere on the battlefield to act ----
+    this.input.on('pointerdown', () => void this.onActionTap());
 
     // ---- Boss UI (floats above the boss) ----
     this.bossNameText = this.add
@@ -175,6 +174,10 @@ export class Game extends Scene {
     if (now - this.lastTapAt < TAP_COOLDOWN_MS) return;
     this.lastTapAt = now;
 
+    // Role-flavored tap sound (pitch-varied, quiet — it fires constantly)
+    const sfx = this.myRole === 'supporter' ? 'sfx_heal' : this.myRole === 'defender' ? 'sfx_shield' : 'sfx_hit';
+    this.playVaried(sfx, 0.3);
+
     // My dino attacks; button pops; attackers also shake the camera
     if (this.myRole === 'attacker') this.camera.shake(80, 0.004);
     this.partySprites.forEach((sprite) => {
@@ -241,6 +244,13 @@ export class Game extends Scene {
       this.partySprites.set(p.username, sprite);
       this.partyNames.set(p.username, nameTag);
     });
+  }
+
+  // Play a sound with random pitch variation (+-100 cents) to avoid repetition fatigue
+  // Play a sound with random pitch variation. Safe if audio isn't loaded (no-op).
+  playVaried(key: string, volume: number) {
+    if (!this.cache.audio.exists(key)) return;
+    this.sound.play(key, { volume, detune: Phaser.Math.Between(-100, 100) });
   }
 
   // Floating damage/heal number that drifts up and fades
@@ -335,6 +345,7 @@ export class Game extends Scene {
       this.pollTimer.remove();
       this.backButton.setVisible(true);
       this.resultText.setVisible(true);
+      this.playVaried(s.result === 'win' ? 'sfx_victory' : 'sfx_defeat', 0.7);
 
       if (s.result === 'win') {
         this.resultText.setText('🏆 VICTORY!').setColor('#ffd700');
