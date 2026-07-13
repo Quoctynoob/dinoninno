@@ -18,9 +18,9 @@ export class Game extends Scene {
   shield: number = 0;
   fightOver: boolean = false;
   lastTapAt: number = 0;
-  artApplied: boolean = false;
   lastSeenBossHp: number | null = null;
   lastSeenPartyHp: number | null = null;
+  artApplied: boolean = false;
 
   // ---- Visuals ----
   background: Phaser.GameObjects.Image | null = null;
@@ -31,22 +31,30 @@ export class Game extends Scene {
   partyNames: Map<string, Phaser.GameObjects.Text> = new Map();
   partyBars: Map<string, { bg: Phaser.GameObjects.Rectangle; fill: Phaser.GameObjects.Rectangle }> = new Map();
 
-  // ---- UI ----
+  // ---- Fight UI ----
   bossNameText: Phaser.GameObjects.Text;
   bossHpBarBg: Phaser.GameObjects.Rectangle;
   bossHpBarFill: Phaser.GameObjects.Rectangle;
   bossHpText: Phaser.GameObjects.Text;
   shieldText: Phaser.GameObjects.Text;
-  statusText: Phaser.GameObjects.Text;
-  resultText: Phaser.GameObjects.Text;
-  backButton: Phaser.GameObjects.Text;
   bossBarWidth: number = 300;
+
+  // ---- End screen (single container = one switch for everything) ----
+  endScreen: Phaser.GameObjects.Container;
+  endPanel: Phaser.GameObjects.Rectangle;
+  resultText: Phaser.GameObjects.Text;
+  statusText: Phaser.GameObjects.Text;
+  celebrationText: Phaser.GameObjects.Text;
+  backButton: Phaser.GameObjects.Text;
+  preFightMe: { level: number; coins: number } | null = null;
+
   pollTimer: Phaser.Time.TimerEvent;
 
   constructor() {
     super('Game');
   }
 
+  // Receives { roomId, role } from the Lobby
   init(data: { roomId: string; role?: Role }) {
     this.roomId = data.roomId;
     this.myRole = data.role ?? 'attacker';
@@ -54,18 +62,19 @@ export class Game extends Scene {
     this.lastTapAt = 0;
     this.lastSeenBossHp = null;
     this.lastSeenPartyHp = null;
+    this.artApplied = false;
+    this.background = null;
+    this.bossIdleTween = null;
+    this.preFightMe = null;
     this.partySprites = new Map();
     this.partyShadows = new Map();
     this.partyNames = new Map();
     this.partyBars = new Map();
-    this.bossIdleTween = null;
-    this.background = null;
-    this.artApplied = false;   // in init()
   }
 
   create() {
     this.camera = this.cameras.main;
-    this.camera.setBackgroundColor(0x1a2f1a); // jungle-dark fallback behind bg image
+    this.camera.setBackgroundColor(0x1a2f1a);
 
     // ---- Boss placeholder; real art swaps in via applyBossArt() once state arrives ----
     this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b).setOrigin(0.5, 1);
@@ -89,49 +98,20 @@ export class Game extends Scene {
       })
       .setOrigin(0.5);
 
-    // ---- Party UI (bottom strip) ----
+    // ---- Shield indicator (near the squad) ----
     this.shieldText = this.add
-      .text(0, 0, '', { fontFamily: 'Arial Black', color: '#7fb3ff', stroke: '#000000', strokeThickness: 3 })
-      .setOrigin(0.5);
-
-    // ---- Status / result ----
-    this.statusText = this.add
       .text(0, 0, '', {
-        fontFamily: 'Arial', color: '#ffffff', align: 'center',
+        fontFamily: 'Arial Black', color: '#7fb3ff',
         stroke: '#000000', strokeThickness: 3,
       })
       .setOrigin(0.5);
-    this.resultText = this.add
-      .text(0, 0, '', {
-        fontFamily: 'Arial Black', color: '#ffd700',
-        stroke: '#000000', strokeThickness: 8,
-      })
-      .setOrigin(0.5)
-      .setVisible(false);
 
-
-    // ---- Back button (post-fight) ----
-    this.backButton = this.add
-      .text(0, 0, '↩️ Back to Hunts', {
-        fontFamily: 'Arial Black', color: '#ffffff', backgroundColor: '#444466',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.pollTimer.remove();
-        this.scene.start('BossSelect');
-      })
-      .setVisible(false);
-
-    // ---- Boss idle: gentle breathing bob (runs forever until death) ----
+    // ---- Boss idle: gentle breathing bob ----
     this.bossIdleTween = this.tweens.add({
       targets: this.bossSprite,
       scaleY: { from: 1, to: 1.04 },
       scaleX: { from: 1, to: 0.98 },
-      duration: 900,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
+      duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     });
 
     // ---- Load + poll ----
@@ -141,10 +121,68 @@ export class Game extends Scene {
       callback: () => void this.loadFightState(),
     });
 
+    // Snapshot my level/coins so the end screen can show what this fight earned
+    void fetch('/api/me')
+      .then((r) => r.json())
+      .then((me: { level: number; coins: number }) => {
+        this.preFightMe = { level: me.level, coins: me.coins };
+      });
+
+    // ================= END SCREEN (full-page, single container) =================
+    this.endPanel = this.add.rectangle(0, 0, 10, 10, 0x0d1526, 1);
+
+    this.resultText = this.add
+      .text(0, 0, '', {
+        fontFamily: 'Arial Black', color: '#ffd700',
+        stroke: '#000000', strokeThickness: 8,
+      })
+      .setOrigin(0.5);
+
+    this.statusText = this.add
+      .text(0, 0, '', {
+        fontFamily: 'Arial', color: '#ffffff', align: 'center',
+        stroke: '#000000', strokeThickness: 3,
+      })
+      .setOrigin(0.5);
+
+    this.celebrationText = this.add
+      .text(0, 0, '', {
+        fontFamily: 'Arial Black', color: '#7dff9b',
+        stroke: '#000000', strokeThickness: 4, align: 'center',
+      })
+      .setOrigin(0.5);
+
+    this.backButton = this.add
+      .text(0, 0, '↩️ Back to Hunts', {
+        fontFamily: 'Arial Black', color: '#ffffff', backgroundColor: '#444466',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.pollTimer.remove();
+        this.scene.start('BossSelect');
+      });
+
+    this.endScreen = this.add.container(0, 0, [
+      this.endPanel,
+      this.resultText,
+      this.statusText,
+      this.celebrationText,
+      this.backButton,
+    ]);
+    this.endScreen.setDepth(100).setVisible(false);
+
+    // ---- Responsive layout ----
     this.updateLayout(this.scale.width, this.scale.height);
     this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
       this.updateLayout(gameSize.width, gameSize.height);
     });
+  }
+
+  // Play a sound with random pitch variation. Safe if audio isn't loaded (no-op).
+  playVaried(key: string, volume: number) {
+    if (!this.cache.audio.exists(key)) return;
+    this.sound.play(key, { volume, detune: Phaser.Math.Between(-100, 100) });
   }
 
   async loadFightState() {
@@ -169,14 +207,17 @@ export class Game extends Scene {
     const sfx = this.myRole === 'supporter' ? 'sfx_heal' : this.myRole === 'defender' ? 'sfx_shield' : 'sfx_hit';
     this.playVaried(sfx, 0.3);
 
-    // My dino attacks; button pops; attackers also shake the camera
+    // Attackers shake the camera a touch
     if (this.myRole === 'attacker') this.camera.shake(80, 0.004);
+
+    // My dino plays its attack animation, then returns to idle
     this.partySprites.forEach((sprite) => {
       if (sprite.texture.key === `dino_${this.myRole}`) {
         sprite.play(`dino_${this.myRole}_attack`);
         sprite.once('animationcomplete', () => sprite.play(`dino_${this.myRole}_idle`));
       }
     });
+
     // Boss squishes slightly under your tap (immediate local feedback)
     this.tweens.add({
       targets: this.bossSprite,
@@ -184,7 +225,6 @@ export class Game extends Scene {
       scaleY: this.bossSprite.scaleY * 0.95,
       duration: 70, yoyo: true,
     });
-    
 
     try {
       const response = await fetch(`/api/fight/${this.roomId}/tap`, { method: 'POST' });
@@ -196,7 +236,34 @@ export class Game extends Scene {
     }
   }
 
-  // Place each party member's dino: bottom-left squad, staggered, facing the boss
+  // Swap in the real boss + arena art once we know which boss this room has
+  applyBossArt(bossId: string) {
+    if (this.artApplied) return;
+    this.artApplied = true;
+
+    const bossKey = `boss_${bossId}`;
+    if (this.textures.exists(bossKey)) {
+      const { x, y } = this.bossSprite;
+      this.bossIdleTween?.remove();
+      this.bossSprite.destroy();
+      this.bossSprite = this.add.image(x, y, bossKey).setOrigin(0.5, 1);
+      this.bossIdleTween = this.tweens.add({
+        targets: this.bossSprite,
+        scaleY: { from: 1, to: 1.04 },
+        scaleX: { from: 1, to: 0.98 },
+        duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    }
+
+    const bgKey = `bg_${bossId}`;
+    if (this.textures.exists(bgKey) && !this.background) {
+      this.background = this.add.image(0, 0, bgKey).setOrigin(0.5).setDepth(-10);
+    }
+
+    this.updateLayout(this.scale.width, this.scale.height);
+  }
+
+  // Place each party member's dino: bottom-left squad with name + mini HP bar above
   syncPartySprites(contributions: PlayerContribution[]) {
     const { width, height } = this.scale;
     const dinoScale = Math.max(Math.round((height * 0.08) / 24), 2);
@@ -204,7 +271,6 @@ export class Game extends Scene {
     contributions.forEach((p, i) => {
       if (this.partySprites.has(p.username)) return;
 
-      // Diagonal stagger: front-most squad member lowest + right-most
       const x = width * (0.16 + i * 0.11);
       const y = height * (0.66 + i * 0.05);
       const key = `dino_${p.role}`;
@@ -214,6 +280,8 @@ export class Game extends Scene {
       const sprite = this.add.sprite(x, y, key)
         .setScale(dinoScale)
         .play(`${key}_idle`);
+
+      // Boss-style name + mini HP bar above the dino
       const barW = 20 * dinoScale;
       const barH = Math.max(3 * Math.floor(dinoScale / 2), 4);
       const barY = y - 12 * dinoScale;
@@ -229,19 +297,11 @@ export class Game extends Scene {
         .rectangle(x - barW / 2, barY, barW, barH, 0x4caf50)
         .setOrigin(0, 0.5);
 
-      this.partyBars.set(p.username, { bg: barBg, fill: barFill });
-
       this.partyShadows.set(p.username, shadow);
       this.partySprites.set(p.username, sprite);
       this.partyNames.set(p.username, nameTag);
+      this.partyBars.set(p.username, { bg: barBg, fill: barFill });
     });
-  }
-
-  // Play a sound with random pitch variation (+-100 cents) to avoid repetition fatigue
-  // Play a sound with random pitch variation. Safe if audio isn't loaded (no-op).
-  playVaried(key: string, volume: number) {
-    if (!this.cache.audio.exists(key)) return;
-    this.sound.play(key, { volume, detune: Phaser.Math.Between(-100, 100) });
   }
 
   // Floating damage/heal number that drifts up and fades
@@ -280,20 +340,25 @@ export class Game extends Scene {
     }
   }
 
+  // Apply full fight state to the UI
   applyState(s: FightStateResponse) {
+    // Once the fight ended, ignore any late/stale responses
     if (this.fightOver) return;
-    this.applyBossArt(s.bossId);
 
+    this.applyBossArt(s.bossId);
     this.syncPartySprites(s.contributions);
 
-    // ---- Detect changes for juice (floating numbers, reactions) ----
+    // ---- Detect changes for juice (floating numbers, reactions, sounds) ----
     if (this.lastSeenBossHp !== null && s.bossHp < this.lastSeenBossHp) {
       const dmg = this.lastSeenBossHp - s.bossHp;
       this.spawnFloatingNumber(this.bossSprite.x, this.bossSprite.y - 60, `-${dmg}`, '#ffdd57');
       this.bossHitReaction();
+      // Soft tick for teammates' hits (skip if it was likely my own tap echoing back)
+      if (Date.now() - this.lastTapAt > 300 && Math.random() < 0.5) {
+        this.playVaried('sfx_hit', 0.15);
+      }
     }
     if (this.lastSeenPartyHp !== null && s.partyHp < this.lastSeenPartyHp) {
-      // Boss counter-attack landed: number over the squad + red screen edge flash
       const dmg = this.lastSeenPartyHp - s.partyHp;
       const firstDino = [...this.partySprites.values()][0];
       if (firstDino) this.spawnFloatingNumber(firstDino.x + 30, firstDino.y - 30, `-${dmg}`, '#ff6b6b');
@@ -323,21 +388,19 @@ export class Game extends Scene {
       width: Math.max((s.bossHp / s.bossMaxHp) * this.bossBarWidth, 0),
       duration: 200, ease: 'Cubic.easeOut',
     });
-    const ratio = s.partyHp / s.partyMaxHp;
+
     // Mini bars above each dino mirror the shared party HP (per-player HP: future)
+    const ratio = s.partyHp / s.partyMaxHp;
     this.partyBars.forEach(({ bg, fill }) => {
       const w = bg.width * ratio;
       this.tweens.add({ targets: fill, width: Math.max(w, 0), duration: 200, ease: 'Cubic.easeOut' });
       fill.setFillStyle(ratio > 0.5 ? 0x4caf50 : ratio > 0.25 ? 0xff9800 : 0xf44336);
     });
 
-    // ---- End states (once) ----
+    // ---- End state (runs once) ----
     if (s.result && !this.fightOver) {
       this.fightOver = true;
       this.pollTimer.remove();
-      this.backButton.setVisible(true);
-      this.resultText.setVisible(true);
-      this.playVaried(s.result === 'win' ? 'sfx_victory' : 'sfx_defeat', 0.7);
 
       if (s.result === 'win') {
         this.resultText.setText('🏆 VICTORY!').setColor('#ffd700');
@@ -345,13 +408,14 @@ export class Game extends Scene {
         this.bossDeathAnimation();
       } else {
         this.resultText.setText('💀 DEFEAT').setColor('#ff6b6b');
-        // Squad slumps: hurt animation on everyone
         this.partySprites.forEach((sprite) => {
           const base = sprite.texture.key;
           sprite.play(`${base}_hurt`);
         });
       }
+      this.playVaried(s.result === 'win' ? 'sfx_victory' : 'sfx_defeat', 0.7);
 
+      // Per-player contribution recap
       const lines = s.contributions.map((p) => {
         const parts = [`⚔️ ${p.damage}`];
         if (p.blocked > 0) parts.push(`🛡️ ${p.blocked}`);
@@ -363,6 +427,32 @@ export class Game extends Scene {
         ? '✨ XP earned! Check the hunt board.'
         : '✨ Some XP earned for the effort.');
       this.statusText.setText(lines.join('\n'));
+
+      // What did I personally earn? Compare against pre-fight snapshot
+      void fetch('/api/me')
+        .then((r) => r.json())
+        .then((me: { level: number; coins: number }) => {
+          const celebration: string[] = [];
+          if (this.preFightMe) {
+            const coinsGained = me.coins - this.preFightMe.coins;
+            if (coinsGained > 0) celebration.push(`🪙 +${coinsGained} coins!`);
+            if (me.level > this.preFightMe.level) {
+              celebration.push(`⬆️ LEVEL UP! Now Lv ${me.level}`);
+              this.playVaried('sfx_victory', 0.5);
+              this.celebrationText.setScale(0.3);
+              this.tweens.add({
+                targets: this.celebrationText,
+                scale: 1, duration: 400, ease: 'Back.easeOut',
+              });
+            }
+          }
+          this.celebrationText.setText(celebration.join('\n'));
+        });
+
+      // Let the boss death animation breathe, then take over the page
+      this.time.delayedCall(800, () => {
+        this.endScreen.setVisible(true);
+      });
     }
   }
 
@@ -381,33 +471,6 @@ export class Game extends Scene {
     });
   }
 
-  // Swap in the real boss + arena art once we know which boss this room has
-  applyBossArt(bossId: string) {
-    if (this.artApplied) return;
-    this.artApplied = true;
-
-    const bossKey = `boss_${bossId}`;
-    if (this.textures.exists(bossKey)) {
-      const { x, y } = this.bossSprite;
-      this.bossIdleTween?.remove();
-      this.bossSprite.destroy();
-      this.bossSprite = this.add.image(x, y, bossKey).setOrigin(0.5, 1);
-      this.bossIdleTween = this.tweens.add({
-        targets: this.bossSprite,
-        scaleY: { from: 1, to: 1.04 },
-        scaleX: { from: 1, to: 0.98 },
-        duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-      });
-    }
-
-    const bgKey = `bg_${bossId}`;
-    if (this.textures.exists(bgKey) && !this.background) {
-      this.background = this.add.image(0, 0, bgKey).setOrigin(0.5).setDepth(-10);
-    }
-
-    this.updateLayout(this.scale.width, this.scale.height);
-  }
-
   updateLayout(width: number, height: number) {
     this.cameras.resize(width, height);
     const cx = width / 2;
@@ -420,11 +483,10 @@ export class Game extends Scene {
       this.background.setScale(scale);
     }
 
-    // ---- Boss: right-of-center, standing on an implied ground line ----
     // ---- Boss: right-of-center on the ground line, ~28% of screen height ----
     const groundY = height * 0.72;
     const bossX = isNarrow ? width * 0.68 : width * 0.66;
-    const srcH = this.bossSprite.height || 64; // frame height (64 for placeholder)
+    const srcH = this.bossSprite.height || 64;
     const bossScale = (height * 0.28) / srcH;
     this.bossSprite.setPosition(bossX, groundY);
     this.bossSprite.setScale(bossScale);
@@ -443,21 +505,23 @@ export class Game extends Scene {
       .setSize(this.bossBarWidth * (this.bossHp / this.bossMaxHp || 0), bossBarH);
     this.bossHpText.setFontSize(barTextSize).setPosition(bossX, bossTopY - bossBarH);
 
-    // ---- Shield indicator: floats near the squad (bottom-left area) ----
+    // ---- Shield indicator near the squad ----
     this.shieldText
       .setFontSize(barTextSize + 2)
       .setPosition(width * 0.16, height * 0.86);
 
-    // ---- Status / result / buttons ----
+    // ---- End screen: full-page takeover ----
     const labelSize = Math.round(Phaser.Math.Clamp(width * 0.02, 11, 16));
     const actionSize = Math.round(Phaser.Math.Clamp(width * 0.045, 22, 40));
     const resultSize = Math.round(Phaser.Math.Clamp(width * 0.065, 30, 56));
 
-    this.statusText.setFontSize(labelSize).setPosition(cx, height * 0.3);
-    this.resultText.setFontSize(resultSize).setPosition(cx, height * 0.42);
+    this.endPanel.setPosition(cx, height / 2).setSize(width, height);
+    this.resultText.setFontSize(resultSize).setPosition(cx, height * 0.18);
+    this.statusText.setFontSize(Math.round(labelSize * 1.15)).setPosition(cx, height * 0.45);
+    this.celebrationText.setFontSize(Math.round(labelSize * 1.5)).setPosition(cx, height * 0.68);
     this.backButton
       .setFontSize(Math.round(actionSize * 0.6))
       .setPadding({ x: 20, y: 12 } as Phaser.Types.GameObjects.Text.TextPadding)
-      .setPosition(cx, height * 0.91);
+      .setPosition(cx, height * 0.85);
   }
 }
