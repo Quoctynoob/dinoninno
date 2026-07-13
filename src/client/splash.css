@@ -2,9 +2,8 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
-  color: #000000;
 }
 
 .app {
@@ -15,14 +14,9 @@
   align-items: center;
   height: 100vh;
   margin: 0;
-  gap: 16px;
-}
-
-.snoo {
-  object-fit: contain;
-  width: 50%;
-  max-width: 250px;
-  margin: 0 auto;
+  gap: 14px;
+  /* Jungle-night gradient backdrop */
+  background: linear-gradient(180deg, #16213e 0%, #0f1626 55%, #14261a 100%);
 }
 
 .content {
@@ -33,54 +27,65 @@
 }
 
 .title {
-  font-size: 1.5em;
-  font-weight: bold;
+  font-size: 2em;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  text-shadow: 0 2px 0 #000, 0 0 18px rgba(255, 120, 40, 0.35);
   text-align: center;
 }
 
-.description {
+.tagline {
   font-size: 1em;
+  color: #9ad1ff;
   text-align: center;
-  color: #5c6c74;
 }
 
-.code {
-  background-color: #e5ebee;
-  padding: 2px 4px;
-  border-radius: 4px;
+/* Animated dino: steps through the first 4 frames (idle) of the 24x24 sheet.
+   Sheet is 576px wide = 24 frames; we show one frame and shift background. */
+.dino {
+  width: 24px;
+  height: 24px;
+  background-image: url('/assets/dino_attacker.png');
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  transform: scale(4);
+  transform-origin: center;
+  margin: 28px 0;
+  animation: dino-idle 0.7s steps(4) infinite;
+}
+
+@keyframes dino-idle {
+  from { background-position: 0px 0; }
+  to { background-position: -96px 0; } /* 4 frames * 24px */
+}
+
+.greeting {
+  font-size: 0.95em;
+  color: #ffd94a;
+  text-align: center;
+  text-shadow: 0 1px 0 #000;
 }
 
 .start-button {
-  background-color: #d93900;
+  background: linear-gradient(180deg, #ff7a3c 0%, #d93900 100%);
   color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
   border: none;
-  padding: 6px 16px;
-  height: 28px;
-  font-size: 1.1em;
-  border-radius: 12px;
+  padding: 14px 28px;
+  font-size: 1.15em;
+  border-radius: 14px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  box-shadow: 0 4px 0 #7b2000, 0 6px 14px rgba(0, 0, 0, 0.4);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
-.footer {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  font-size: 0.8em;
-  color: #666666;
-}
-
-.docs-link {
-  cursor: pointer;
-}
-
-.divider {
-  color: rgba(0, 0, 0, 0.1);
+.start-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #7b2000, 0 3px 8px rgba(0, 0, 0, 0.4);
 }
