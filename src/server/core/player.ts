@@ -44,8 +44,8 @@ export async function getPlayer(username: string): Promise<PlayerState> {
   const raw = await redis.hGetAll(playerKey(username));
 
   // Fresh player defaults
-  let level = parseInt(raw?.level ?? '1');
-  let xp = parseInt(raw?.xp ?? '0');
+  const level = parseInt(raw?.level ?? '1');
+  const xp = parseInt(raw?.xp ?? '0');
   let energy = parseInt(raw?.energy ?? ENERGY_MAX.toString());
   let energyStamp = parseInt(raw?.energyStamp ?? now.toString());
   let rewardsToday = parseInt(raw?.rewardsToday ?? '0');

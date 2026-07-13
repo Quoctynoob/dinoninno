@@ -288,7 +288,7 @@ export async function applyTap(roomId: string, username: string, postId: string)
   const role = (await redis.hGet(playersKey(roomId), username)) as Role | undefined;
   const boss = getBoss(room.bossId ?? 'raptor');
 
-  let killed = false;
+  let killed: boolean;
 
   if (role === 'defender') {
     // Shield up (atomic, clamped) + a small hit (30% damage)

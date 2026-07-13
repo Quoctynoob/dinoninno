@@ -1,8 +1,6 @@
 import { Boot } from './scenes/Boot';
-import { GameOver } from './scenes/GameOver';
 import { Game as MainGame } from './scenes/Game';
 import { Lobby } from './scenes/Lobby';
-import { MainMenu } from './scenes/MainMenu';
 import * as Phaser from 'phaser';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
@@ -22,7 +20,7 @@ const config: Phaser.Types.Core.GameConfig = {
     width: 1024,
     height: 768,
   },
-  scene: [Boot, Preloader, MainMenu, BossSelect, Lobby, MainGame, GameOver],
+  scene: [Boot, Preloader, BossSelect, Lobby, MainGame],
 };
 
 const StartGame = (parent: string) => {
