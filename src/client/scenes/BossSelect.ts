@@ -117,8 +117,8 @@ export class BossSelect extends Scene {
     }
     this.energyChip.text.setText(energy);
 
-    this.rewardsChip.text.setText(`🎁 ${m.rewardCap - m.rewardsToday}/${m.rewardCap}`);
-    this.coinsChip.text.setText(`🪙 ${m.coins}`);
+    this.rewardsChip.text.setText(` ${m.rewardCap - m.rewardsToday}/${m.rewardCap}`);
+    this.coinsChip.text.setText(` ${m.coins}`);
 
     // XP bar + number inside it
     const ratio = m.xpForNext > 0 ? m.xp / m.xpForNext : 0;
@@ -169,12 +169,12 @@ export class BossSelect extends Scene {
         .text(0, 0, boss.name, { fontFamily: 'Arial Black', color: '#ffffff' })
         .setOrigin(0.5);
       const hp = this.add
-        .text(0, 0, `❤️ ${boss.maxHp} HP`, { fontFamily: 'Arial', color: '#ff9b9b' })
+        .text(0, 0, ` ${boss.maxHp} HP`, { fontFamily: 'Arial', color: '#ff9b9b' })
         .setOrigin(0.5);
       const waiting = this.add
         .text(
           0, 0,
-          boss.waiting > 0 ? `🔥 ${boss.waiting} hunter${boss.waiting > 1 ? 's' : ''} waiting!` : 'Be the first to join!',
+          boss.waiting > 0 ? ` ${boss.waiting} hunter${boss.waiting > 1 ? 's' : ''} waiting!` : 'Be the first to join!',
           { fontFamily: 'Arial', color: boss.waiting > 0 ? '#ffd700' : '#8899bb' }
         )
         .setOrigin(0.5);

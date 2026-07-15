@@ -20,12 +20,13 @@ export class Game extends Scene {
   lastTapAt: number = 0;
   lastSeenBossHp: number | null = null;
   lastSeenPartyHp: number | null = null;
-  artApplied: boolean = false;
 
   // ---- Visuals ----
   background: Phaser.GameObjects.Image | null = null;
-  bossSprite: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
+  bossSprite: Phaser.GameObjects.Image;
   bossIdleTween: Phaser.Tweens.Tween | null = null;
+  currentBossId: string = '';
+  initialBossId: string = 'raptor';
   partySprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
   partyShadows: Map<string, Phaser.GameObjects.Image> = new Map();
   partyNames: Map<string, Phaser.GameObjects.Text> = new Map();
@@ -54,17 +55,18 @@ export class Game extends Scene {
     super('Game');
   }
 
-  // Receives { roomId, role } from the Lobby
-  init(data: { roomId: string; role?: Role }) {
+  // Receives { roomId, role, bossId } from the Lobby
+  init(data: { roomId: string; role?: Role; bossId?: string }) {
     this.roomId = data.roomId;
     this.myRole = data.role ?? 'attacker';
+    this.initialBossId = data.bossId ?? 'raptor';
     this.fightOver = false;
     this.lastTapAt = 0;
     this.lastSeenBossHp = null;
     this.lastSeenPartyHp = null;
-    this.artApplied = false;
     this.background = null;
     this.bossIdleTween = null;
+    this.currentBossId = '';
     this.preFightMe = null;
     this.partySprites = new Map();
     this.partyShadows = new Map();
@@ -74,17 +76,20 @@ export class Game extends Scene {
 
   create() {
     this.camera = this.cameras.main;
-    this.camera.setBackgroundColor(0x1a2f1a);
+    this.camera.setBackgroundColor(0x0d1526);
+    this.camera.fadeIn(300, 13, 21, 38);
 
-    // ---- Boss placeholder; real art swaps in via applyBossArt() once state arrives ----
-    this.bossSprite = this.add.rectangle(0, 0, 64, 64, 0x6a3d7b).setOrigin(0.5, 1);
+    // ---- Background + boss: created directly with real art (known from the lobby) ----
+    this.background = this.add.image(0, 0, `bg_${this.initialBossId}`).setOrigin(0.5).setDepth(-10);
+    this.bossSprite = this.add.image(0, 0, `boss_${this.initialBossId}`).setOrigin(0.5, 1);
+    this.currentBossId = this.initialBossId;
 
     // ---- Tap anywhere on the battlefield to act ----
     this.input.on('pointerdown', () => void this.onActionTap());
 
     // ---- Boss UI (floats above the boss) ----
     this.bossNameText = this.add
-      .text(0, 0, 'Loading...', {
+      .text(0, 0, '', {
         fontFamily: 'Arial Black', color: '#ffffff',
         stroke: '#000000', strokeThickness: 6,
       })
@@ -236,30 +241,13 @@ export class Game extends Scene {
     }
   }
 
-  // Swap in the real boss + arena art once we know which boss this room has
-  applyBossArt(bossId: string) {
-    if (this.artApplied) return;
-    this.artApplied = true;
-
-    const bossKey = `boss_${bossId}`;
-    if (this.textures.exists(bossKey)) {
-      const { x, y } = this.bossSprite;
-      this.bossIdleTween?.remove();
-      this.bossSprite.destroy();
-      this.bossSprite = this.add.image(x, y, bossKey).setOrigin(0.5, 1);
-      this.bossIdleTween = this.tweens.add({
-        targets: this.bossSprite,
-        scaleY: { from: 1, to: 1.04 },
-        scaleX: { from: 1, to: 0.98 },
-        duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-      });
-    }
-
-    const bgKey = `bg_${bossId}`;
-    if (this.textures.exists(bgKey) && !this.background) {
-      this.background = this.add.image(0, 0, bgKey).setOrigin(0.5).setDepth(-10);
-    }
-
+  // Safety net: if the server says this room is a different boss (e.g. reconnect
+  // into an active fight), swap the textures to match
+  ensureBossArt(bossId: string) {
+    if (bossId === this.currentBossId) return;
+    this.currentBossId = bossId;
+    this.bossSprite.setTexture(`boss_${bossId}`);
+    this.background?.setTexture(`bg_${bossId}`);
     this.updateLayout(this.scale.width, this.scale.height);
   }
 
@@ -332,12 +320,8 @@ export class Game extends Scene {
       yoyo: true,
       repeat: 2,
     });
-    if (this.bossSprite instanceof Phaser.GameObjects.Image) {
-      this.bossSprite.setTint(0xff6666);
-      this.time.delayedCall(120, () => {
-        (this.bossSprite as Phaser.GameObjects.Image).clearTint();
-      });
-    }
+    this.bossSprite.setTint(0xff6666);
+    this.time.delayedCall(120, () => this.bossSprite.clearTint());
   }
 
   // Apply full fight state to the UI
@@ -345,7 +329,7 @@ export class Game extends Scene {
     // Once the fight ended, ignore any late/stale responses
     if (this.fightOver) return;
 
-    this.applyBossArt(s.bossId);
+    this.ensureBossArt(s.bossId);
     this.syncPartySprites(s.contributions);
 
     // ---- Detect changes for juice (floating numbers, reactions, sounds) ----
@@ -483,27 +467,40 @@ export class Game extends Scene {
       this.background.setScale(scale);
     }
 
-    // ---- Boss: right-of-center on the ground line, ~28% of screen height ----
+    // ---- Boss: right-of-center on the ground line ----
+    // ---- Boss: size capped by BOTH height and width so no screen shape breaks it ----
     const groundY = height * 0.72;
-    const bossX = isNarrow ? width * 0.68 : width * 0.66;
+    const bossX = isNarrow ? width * 0.66 : width * 0.68;
+
     const srcH = this.bossSprite.height || 64;
-    const bossScale = (height * 0.28) / srcH;
+    const srcW = this.bossSprite.width || 64;
+
+    // Boss may be at most 34% of screen height AND 42% of screen width,
+    // whichever is more restrictive — tall bosses obey the height cap,
+    // wide bosses obey the width cap. Never breaks on any aspect ratio.
+    const bossScale = Math.min(
+      (height * 0.34) / srcH,
+      (width * 0.42) / srcW
+    );
     this.bossSprite.setPosition(bossX, groundY);
     this.bossSprite.setScale(bossScale);
 
-    // ---- Boss UI floats above the boss ----
+    // ---- Boss UI: pinned to a fixed screen band (NOT the boss's head) ----
+    // Fixed band = always visible, always readable, regardless of boss size.
     const titleSize = Math.round(Phaser.Math.Clamp(width * 0.036, 16, 30));
     const barTextSize = Math.round(Phaser.Math.Clamp(width * 0.02, 11, 16));
-    this.bossBarWidth = Math.min(width * 0.34, 260);
+    this.bossBarWidth = Math.min(width * 0.42, 280);
     const bossBarH = Math.round(Phaser.Math.Clamp(height * 0.03, 14, 22));
-    const bossTopY = groundY - srcH * bossScale;
 
-    this.bossNameText.setFontSize(titleSize).setPosition(bossX, bossTopY - bossBarH * 2.4);
-    this.bossHpBarBg.setPosition(bossX, bossTopY - bossBarH).setSize(this.bossBarWidth, bossBarH);
+    const bossBarY = height * 0.12;                    // bar band: 12% from top
+    const bossNameY = bossBarY - bossBarH * 1.6;       // name right above the bar
+
+    this.bossNameText.setFontSize(titleSize).setPosition(bossX, bossNameY);
+    this.bossHpBarBg.setPosition(bossX, bossBarY).setSize(this.bossBarWidth, bossBarH);
     this.bossHpBarFill
-      .setPosition(bossX - this.bossBarWidth / 2, bossTopY - bossBarH)
+      .setPosition(bossX - this.bossBarWidth / 2, bossBarY)
       .setSize(this.bossBarWidth * (this.bossHp / this.bossMaxHp || 0), bossBarH);
-    this.bossHpText.setFontSize(barTextSize).setPosition(bossX, bossTopY - bossBarH);
+    this.bossHpText.setFontSize(barTextSize).setPosition(bossX, bossBarY);
 
     // ---- Shield indicator near the squad ----
     this.shieldText
@@ -523,5 +520,7 @@ export class Game extends Scene {
       .setFontSize(Math.round(actionSize * 0.6))
       .setPadding({ x: 20, y: 12 } as Phaser.Types.GameObjects.Text.TextPadding)
       .setPosition(cx, height * 0.85);
+
+      console.log('boss debug:', { srcH, bossScale, texH: this.bossSprite.height, dispH: this.bossSprite.displayHeight, screenH: height });
   }
 }

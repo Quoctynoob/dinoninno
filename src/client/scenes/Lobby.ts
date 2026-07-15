@@ -91,7 +91,7 @@ export class Lobby extends Scene {
       .text(0, 0, '⚡ -/-', { fontFamily: 'Arial Black', color: '#ffd94a', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(1, 0.5);
     this.rewardsText = this.add
-      .text(0, 0, '🎁 -/-', { fontFamily: 'Arial Black', color: '#ff9ecb', stroke: '#000000', strokeThickness: 3 })
+      .text(0, 0, ' -/-', { fontFamily: 'Arial Black', color: '#ff9ecb', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(1, 0.5);
 
     // ================= STANDS =================
@@ -166,7 +166,7 @@ export class Lobby extends Scene {
       const res = await fetch('/api/me');
       this.me = (await res.json()) as MeResponse;
       this.energyText.setText(`⚡ ${this.me.energy}/${this.me.energyMax}`);
-      this.rewardsText.setText(`🎁 ${this.me.rewardCap - this.me.rewardsToday}/${this.me.rewardCap}`);
+      this.rewardsText.setText(` ${this.me.rewardCap - this.me.rewardsToday}/${this.me.rewardCap}`);
     } catch (e) {
       console.error('Failed to load player:', e);
     }
@@ -190,7 +190,7 @@ export class Lobby extends Scene {
 
       if (data.status === 'started' && data.joined) {
         this.pollTimer.remove();
-        this.scene.start('Game', { roomId: data.roomId, role: data.myRole ?? this.myRole ?? 'attacker' });
+        this.scene.start('Game', { roomId: data.roomId, role: data.myRole ?? this.myRole ?? 'attacker', bossId: this.bossId });
         return;
       }
 
